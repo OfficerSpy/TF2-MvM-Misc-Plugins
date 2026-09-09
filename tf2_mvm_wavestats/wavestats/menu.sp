@@ -1,5 +1,6 @@
 #define WAVESTATS_MENU_DISPLAY_TIME	30
 
+//I will admit, this array structure was taken from l4d2_skill_announce
 enum
 {
 	STATS_PLAYER_INDEX,
