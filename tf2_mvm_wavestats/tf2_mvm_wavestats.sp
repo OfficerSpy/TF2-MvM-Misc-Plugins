@@ -27,6 +27,8 @@ enum struct esPlayerStats
 	}
 }
 
+char g_sCurrentMission[PLATFORM_MAX_PATH];
+
 //Number of waves played on the current map, regardless of fail or pass
 int g_iNumWavesPlayed;
 
@@ -39,13 +41,14 @@ public Plugin myinfo =
 	name = "[TF2] MvM Wave Statistics",
 	author = "Officer Spy",
 	description = "Reports details about a game after a wave has ended.",
-	version = "1.0.0",
+	version = "1.0.1",
 	url = ""
 };
 
 public void OnPluginStart()
 {
 	RegConsoleCmd("sm_wavestats", Command_WaveStats, "Brings up the wave statistics menu.");
+	HookEvent("teamplay_round_start", Event_TeamplayRoundStart);
 	HookEvent("mvm_begin_wave", Event_MvmBeginWave);
 	HookEvent("player_death", Event_PlayerDeath);
 	HookEvent("player_hurt", Event_PlayerHurt);
@@ -79,6 +82,24 @@ public Action Command_WaveStats(int client, int args)
 	g_arrWaveStatsMenu.DisplayToClient(client);
 	
 	return Plugin_Handled;
+}
+
+public void Event_TeamplayRoundStart(Event event, const char[] name, bool dontBroadcast)
+{
+	int rsrc = FindEntityByClassname(-1, "tf_objective_resource");
+	
+	if (rsrc != -1)
+	{
+		TF2_GetMvMPopfileName(rsrc, g_sCurrentMission, sizeof(g_sCurrentMission));
+		
+		//Trim these off
+		ReplaceString(g_sCurrentMission, sizeof(g_sCurrentMission), "scripts/population/", "");
+		ReplaceString(g_sCurrentMission, sizeof(g_sCurrentMission), ".pop", "");
+	}
+	else
+	{
+		g_sCurrentMission = "UNKNOWN SEX MISSION";
+	}
 }
 
 public void Event_MvmBeginWave(Event event, const char[] name, bool dontBroadcast)

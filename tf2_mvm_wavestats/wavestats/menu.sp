@@ -1,5 +1,17 @@
 #define WAVESTATS_MENU_DISPLAY_TIME	30
 
+enum
+{
+	STATS_PLAYER_INDEX,
+	STATS_KILLS,
+	STATS_DEATHS,
+	STATS_DAMAGE,
+	STATS_TANK_DAMAGE,
+	STATS_HEALING,
+	STATS_CREDITS,
+	STATS_COUNT
+}
+
 enum struct esWaveStatsMenu
 {
 	Menu hWaveStats;
@@ -68,44 +80,88 @@ enum struct esWaveStatsMenu
 		
 		if (rsrc != -1)
 		{
-			int nCurrentWave = TF2_GetMannVsMachineWaveCount(rsrc);
-			char sMissionName[PLATFORM_MAX_PATH]; TF2_GetMvMPopfileName(rsrc, sMissionName, sizeof(sMissionName));
-			
-			//Trim the extras
-			ReplaceString(sMissionName, sizeof(sMissionName), "scripts/population/", "");
-			ReplaceString(sMissionName, sizeof(sMissionName), ".pop", "");
-			
 			//Update title with current wave number
-			this.hWaveStats.SetTitle("[MvM Wave Statistics]\n%s\nWave %d", sMissionName, nCurrentWave);
+			this.hWaveStats.SetTitle("[MvM Wave Statistics]\n%s\nWave %d", g_sCurrentMission, TF2_GetMannVsMachineWaveCount(rsrc));
 		}
 		
 		this.DestroySubMenus();
 		this.CreateSubMenus();
 		
+		int[][] iArrStatistics = new int[MaxClients][STATS_COUNT];
+		int iTotalDefenders = 0;
+		
+		int iTotalStats[STATS_COUNT];
+		
 		for (int i = 1; i <= MaxClients; i++)
 		{
 			if (IsClientInGame(i) && IsPVEDefender(i))
 			{
+				//We used to print directly here, but now we build a new array for sorting purposes
+				iArrStatistics[iTotalDefenders][STATS_PLAYER_INDEX] = i;
+				iArrStatistics[iTotalDefenders][STATS_KILLS] = g_arrPlayerStats[i].iKills;
+				iArrStatistics[iTotalDefenders][STATS_DEATHS] = g_arrPlayerStats[i].iDeaths;
+				iArrStatistics[iTotalDefenders][STATS_DAMAGE] = g_arrPlayerStats[i].iDamage;
+				iArrStatistics[iTotalDefenders][STATS_TANK_DAMAGE] = g_arrPlayerStats[i].iTankDamage;
+				iArrStatistics[iTotalDefenders][STATS_HEALING] = g_arrPlayerStats[i].iHealing;
+				iArrStatistics[iTotalDefenders][STATS_CREDITS] = g_arrPlayerStats[i].iCredits;
+				iTotalDefenders++;
+				
+				//Gather the total amount from all RED players
+				iTotalStats[STATS_KILLS] += g_arrPlayerStats[i].iKills;
+				iTotalStats[STATS_DEATHS] += g_arrPlayerStats[i].iDeaths;
+				iTotalStats[STATS_DAMAGE] += g_arrPlayerStats[i].iDamage;
+				iTotalStats[STATS_TANK_DAMAGE] += g_arrPlayerStats[i].iTankDamage;
+				iTotalStats[STATS_HEALING] += g_arrPlayerStats[i].iHealing;
+				iTotalStats[STATS_CREDITS] += g_arrPlayerStats[i].iCredits;
+			}
+		}
+		
+		for (int i = 1; i < STATS_COUNT; i++)
+		{
+			Panel hPanel;
+			
+			//This looks kinda dumb...
+			switch (i)
+			{
+				case STATS_KILLS:
+				{
+					hPanel = this.hKills;
+					SortCustom2D(iArrStatistics, iTotalDefenders, SortFunc_Kills);
+				}
+				case STATS_DEATHS:
+				{
+					hPanel = this.hDeaths;
+					SortCustom2D(iArrStatistics, iTotalDefenders, SortFunc_Deaths);
+				}
+				case STATS_DAMAGE:
+				{
+					hPanel = this.hDamage;
+					SortCustom2D(iArrStatistics, iTotalDefenders, SortFunc_Damage);
+				}
+				case STATS_TANK_DAMAGE:
+				{
+					hPanel = this.hTankDamage;
+					SortCustom2D(iArrStatistics, iTotalDefenders, SortFunc_TankDamage);
+				}
+				case STATS_HEALING:
+				{
+					hPanel = this.hHealing;
+					SortCustom2D(iArrStatistics, iTotalDefenders, SortFunc_Healing);
+				}
+				case STATS_CREDITS:
+				{
+					hPanel = this.hCreditsCollected;
+					SortCustom2D(iArrStatistics, iTotalDefenders, SortFunc_CreditsCollected);
+				}
+			}
+			
+			for (int j = 0; j < iTotalDefenders; j++)
+			{
 				char sBuffer[PLATFORM_MAX_PATH];
-				char sClassName[9]; GetPlayerClassName(i, sClassName, sizeof(sClassName));
+				char sClassName[9]; GetPlayerClassName(iArrStatistics[j][STATS_PLAYER_INDEX], sClassName, sizeof(sClassName));
 				
-				FormatEx(sBuffer, sizeof(sBuffer), "%N (%s): %d", i, sClassName, g_arrPlayerStats[i].iKills);
-				this.hKills.DrawItem(sBuffer);
-				
-				FormatEx(sBuffer, sizeof(sBuffer), "%N (%s): %d", i, sClassName, g_arrPlayerStats[i].iDeaths);
-				this.hDeaths.DrawItem(sBuffer);
-				
-				FormatEx(sBuffer, sizeof(sBuffer), "%N (%s): %d", i, sClassName, g_arrPlayerStats[i].iDamage);
-				this.hDamage.DrawItem(sBuffer);
-				
-				FormatEx(sBuffer, sizeof(sBuffer), "%N (%s): %d", i, sClassName, g_arrPlayerStats[i].iTankDamage);
-				this.hTankDamage.DrawItem(sBuffer);
-				
-				FormatEx(sBuffer, sizeof(sBuffer), "%N (%s): %d", i, sClassName, g_arrPlayerStats[i].iHealing);
-				this.hHealing.DrawItem(sBuffer);
-				
-				FormatEx(sBuffer, sizeof(sBuffer), "%N (%s): %d", i, sClassName, g_arrPlayerStats[i].iCredits);
-				this.hCreditsCollected.DrawItem(sBuffer);
+				FormatEx(sBuffer, sizeof(sBuffer), "%N (%s): %d (%d%%)", iArrStatistics[j][STATS_PLAYER_INDEX], sClassName, iArrStatistics[j][i], RoundToNearest((float(iArrStatistics[j][i]) / float(iTotalStats[i])) * 100));
+				hPanel.DrawItem(sBuffer);
 			}
 		}
 	}
@@ -136,4 +192,71 @@ static void MenuHandler_WaveStats(Handle menu, MenuAction action, int param1, in
 static void MenuHandler_WaveStatsSubMenu(Menu menu, MenuAction action, int param1, int param2)
 {
 	//TODO: add a back button to return to the main menu
+}
+
+static int SortFunc_Kills(int[] elem1, int[] elem2, const int[][] array, Handle hndl)
+{
+	//Sort by descending order
+	if (elem1[STATS_KILLS] > elem2[STATS_KILLS])
+		return -1;
+	
+	if (elem1[STATS_KILLS] < elem2[STATS_KILLS])
+		return 1;
+	
+	return 0;
+}
+
+static int SortFunc_Deaths(int[] elem1, int[] elem2, const int[][] array, Handle hndl)
+{
+	if (elem1[STATS_DEATHS] > elem2[STATS_DEATHS])
+		return -1;
+	
+	if (elem1[STATS_DEATHS] < elem2[STATS_DEATHS])
+		return 1;
+	
+	return 0;
+}
+
+static int SortFunc_Damage(int[] elem1, int[] elem2, const int[][] array, Handle hndl)
+{
+	if (elem1[STATS_DAMAGE] > elem2[STATS_DAMAGE])
+		return -1;
+	
+	if (elem1[STATS_DAMAGE] < elem2[STATS_DAMAGE])
+		return 1;
+	
+	return 0;
+}
+
+static int SortFunc_TankDamage(int[] elem1, int[] elem2, const int[][] array, Handle hndl)
+{
+	if (elem1[STATS_TANK_DAMAGE] > elem2[STATS_TANK_DAMAGE])
+		return -1;
+	
+	if (elem1[STATS_TANK_DAMAGE] < elem2[STATS_TANK_DAMAGE])
+		return 1;
+	
+	return 0;
+}
+
+static int SortFunc_Healing(int[] elem1, int[] elem2, const int[][] array, Handle hndl)
+{
+	if (elem1[STATS_HEALING] > elem2[STATS_HEALING])
+		return -1;
+	
+	if (elem1[STATS_HEALING] < elem2[STATS_HEALING])
+		return 1;
+	
+	return 0;
+}
+
+static int SortFunc_CreditsCollected(int[] elem1, int[] elem2, const int[][] array, Handle hndl)
+{
+	if (elem1[STATS_CREDITS] > elem2[STATS_CREDITS])
+		return -1;
+	
+	if (elem1[STATS_CREDITS] < elem2[STATS_CREDITS])
+		return 1;
+	
+	return 0;
 }
