@@ -17,6 +17,7 @@ int g_iLastWaveNumber = 0;
 int g_iFailCounterTick = 0;
 Handle g_hWaveTimeTimer = null;
 int g_iWaveFailCount;
+char g_sCurrentMission[PLATFORM_MAX_PATH];
 
 static bool m_bIsSpeedrun;
 static float m_flSpeedrunStartTime;
@@ -170,15 +171,14 @@ public void Event_MvmMissionComplete(Event event, const char[] name, bool dontBr
 	if (m_bIsSpeedrun)
 	{
 		int newTime = RoundToFloor(GetGameTime() - m_flSpeedrunStartTime);
-		char sMission[PLATFORM_MAX_PATH]; GetCurrentMissionName(sMission, sizeof(sMission));
 		
-		if (newTime < GetSpeedrunRecordTime(sMission))
+		if (newTime < GetSpeedrunRecordTime(g_sCurrentMission))
 		{
-			SetSpeedrunRecordTime(sMission, newTime);
+			SetSpeedrunRecordTime(g_sCurrentMission, newTime);
 			
 			
 			PrintToChatAll("\x07%sA NEW RECORD HAS BEEN SET!", "FFD700");
-			LogMessage("New record set for mission %s (time: %d)", sMission, newTime);
+			LogMessage("New record set for mission %s (time: %d)", g_sCurrentMission, newTime);
 		}
 	}
 	
@@ -192,6 +192,21 @@ public void Event_TeamplayRoundStart(Event event, const char[] name, bool dontBr
 	{
 		KillTimer(g_hWaveTimeTimer);
 		g_hWaveTimeTimer = null;
+	}
+	
+	int rsrc = FindEntityByClassname(-1, "tf_objective_resource");
+	
+	if (rsrc != -1)
+	{
+		TF2_GetMvMPopfileName(rsrc, g_sCurrentMission, sizeof(g_sCurrentMission));
+		
+		//Trim these off
+		ReplaceString(g_sCurrentMission, sizeof(g_sCurrentMission), "scripts/population/", "");
+		ReplaceString(g_sCurrentMission, sizeof(g_sCurrentMission), ".pop", "");
+	}
+	else
+	{
+		g_sCurrentMission = "STOP CHANGING MISSION NAMES";
 	}
 }
 
@@ -396,22 +411,6 @@ stock void WriteTime(float time, char[] str, int maxlen)
 		FormatEx(str, maxlen, "%d min %d sec", (timeint / secPerMinute) % secPerMinute, (timeint) % secPerMinute);
 	else
 		FormatEx(str, maxlen, "%d sec", (timeint) % secPerMinute);
-}
-
-stock void GetCurrentMissionName(char[] buffer, int maxlen)
-{
-	int rsrc = FindEntityByClassname(-1, "tf_objective_resource");
-	
-	if (rsrc != -1)
-	{
-		TF2_GetMvMPopfileName(rsrc, buffer, maxlen);
-		ReplaceString(buffer, maxlen, "scripts/population/", "");
-		ReplaceString(buffer, maxlen, ".pop", "");
-	}
-	else
-	{
-		LogError("GetCurrentMissionName: Could not find entity tf_objective_resource!");
-	}
 }
 
 stock void WriteTimeLong(float time, char[] str, int maxlen)
