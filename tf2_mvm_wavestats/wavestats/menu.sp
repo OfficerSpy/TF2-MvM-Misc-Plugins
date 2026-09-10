@@ -1,4 +1,4 @@
-#define WAVESTATS_MENU_DISPLAY_TIME	30
+#define WAVESTATS_MENU_DISPLAY_TIME	20
 
 //I will admit, this array structure was taken from l4d2_skill_announce
 enum
@@ -192,7 +192,18 @@ static void MenuHandler_WaveStats(Handle menu, MenuAction action, int param1, in
 
 static void MenuHandler_WaveStatsSubMenu(Menu menu, MenuAction action, int param1, int param2)
 {
-	//TODO: add a back button to return to the main menu
+	if (action == MenuAction_Select)
+	{
+		//Send to the main menu for now
+		g_arrWaveStatsMenu.DisplayToClient(param1);
+		return;
+	}
+	
+	if (action == MenuAction_Cancel)
+	{
+		//Normally doesn't happen, but other mods can force off this menu
+		CPrintToChat(param1, "%s Type {unique}!wavestats{default} to bring up this menu again.", PLUGIN_PREFIX);
+	}
 }
 
 static int SortFunc_Kills(int[] elem1, int[] elem2, const int[][] array, Handle hndl)

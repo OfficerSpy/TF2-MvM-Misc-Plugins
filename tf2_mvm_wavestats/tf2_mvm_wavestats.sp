@@ -1,11 +1,14 @@
 #include <sourcemod>
 #include <tf2_stocks>
+#include <sdkhooks>
 #include <multicolors>
 
 #pragma semicolon 1
 #pragma newdecls required
 
 #define PLUGIN_PREFIX	"{unique}[MvMStats]{default}"
+
+#define TANK_HISTORY_SIZE	MAXPLAYERS + 1
 
 enum struct esPlayerStats
 {
@@ -27,6 +30,72 @@ enum struct esPlayerStats
 	}
 }
 
+#if SOURCEMOD_V_MINOR >= 13
+methodmap TankMap < IntMap
+{
+	public bool RegisterTank(int tank)
+	{
+		//History is an array indexed by client, each representing their damage towards this specific tank
+		//All default damage values are 0 unless we say otherwise
+		int iTankDamageHistory[TANK_HISTORY_SIZE] = {0, ...};
+		return this.SetArray(tank, iTankDamageHistory, sizeof(iTankDamageHistory), false);
+	}
+	
+	public bool IsTankRegistered(int tank)
+	{
+		return this.ContainsKey(tank);
+	}
+	
+	public void RemoveTank(int tank)
+	{
+		this.Remove(tank);
+	}
+	
+	public void RemoveAllTanks()
+	{
+		this.Clear();
+	}
+	
+	//Register the damage tracked for a specific client
+	public void AddTankDamage(int tank, int client, int damage)
+	{
+		int iTankDamageHistory[TANK_HISTORY_SIZE];
+		
+		if (!this.GetArray(tank, iTankDamageHistory, sizeof(iTankDamageHistory)))
+		{
+			ThrowError("Tank Boss %d not registered!", tank);
+			return;
+		}
+		
+		iTankDamageHistory[client] += damage;
+		this.SetArray(tank, iTankDamageHistory, sizeof(iTankDamageHistory), true);
+	}
+	
+	public void RemoveTankDamageHistory(int client)
+	{
+		//Wipe any trace of this player from every active tank's damage history
+		IntMapSnapshot shot = this.Snapshot();
+		
+		for (int i = 0; i < shot.Length; i++)
+		{
+			int iTankDamageHistory[TANK_HISTORY_SIZE];
+			
+			if (this.GetArray(shot.GetKey(i), iTankDamageHistory, sizeof(iTankDamageHistory)))
+			{
+				iTankDamageHistory[client] = 0;
+				this.SetArray(tank, iTankDamageHistory, sizeof(iTankDamageHistory), true);
+			}
+		}
+		
+		shot.Close();
+	}
+}
+#endif
+
+Handle g_hHudSyncObject;
+#if SOURCEMOD_V_MINOR >= 13
+IntMap g_adtTanks;
+#endif
 char g_sCurrentMission[PLATFORM_MAX_PATH];
 
 //Number of waves played on the current map, regardless of fail or pass
@@ -58,17 +127,47 @@ public void OnPluginStart()
 	HookEvent("mvm_sniper_headshot_currency", Event_MvmSniperHeadshotCurrency);
 	HookEvent("mvm_wave_complete", Event_MvmWaveComplete);
 	HookEvent("teamplay_round_win", Event_TeamplayRoundWin);
+	
+	g_hHudSyncObject = CreateHudSynchronizer();
+#if SOURCEMOD_V_MINOR >= 13
+	g_adtTanks = new IntMap();
+#endif
 }
 
 public void OnMapStart()
 {
 	g_iNumWavesPlayed = 0;
 	g_arrWaveStatsMenu.CreateMainMenu();
+#if SOURCEMOD_V_MINOR >= 13
+	g_adtTanks.RemoveAllTanks();
+#endif
 }
 
 public void OnClientDisconnect_Post(int client)
 {
 	g_arrPlayerStats[client].Reset();
+#if SOURCEMOD_V_MINOR >= 13
+	g_adtTanks.RemoveTankDamageHistory(client);
+#endif
+}
+
+public void OnEntityCreated(int entity, const char[] classname)
+{
+	if (!strcmp(classname, "tank_boss", false))
+	{
+		SDKHook(entity, SDKHook_SpawnPost, TankBoss_SpawnPost);
+	}
+}
+
+public void OnEntityDestroyed(int entity)
+{
+#if SOURCEMOD_V_MINOR >= 13
+	if (g_adtTanks.IsTankRegistered(entity))
+	{
+		//TODO: show tank winner?
+		g_adtTanks.RemoveTank(entity);
+	}
+#endif
 }
 
 public Action Command_WaveStats(int client, int args)
@@ -156,7 +255,13 @@ public void Event_NpcHurt(Event event, const char[] name, bool dontBroadcast)
 		
 		if (IsValidClientIndex(attacker) && IsPVEDefender(attacker))
 		{
-			g_arrPlayerStats[attacker].iTankDamage += event.GetInt("damageamount");
+			int damage = event.GetInt("damageamount");
+			g_arrPlayerStats[attacker].iTankDamage += damage;
+			
+#if SOURCEMOD_V_MINOR >= 13
+			if (g_adtTanks.IsTankRegistered(entity))
+				g_adtTanks.AddTankDamage(entity, attacker, damage);
+#endif
 		}
 	}
 }
@@ -206,6 +311,25 @@ public void Event_TeamplayRoundWin(Event event, const char[] name, bool dontBroa
 	g_iNumWavesPlayed++;
 	g_arrWaveStatsMenu.UpdateNewWaveStats();
 	g_arrWaveStatsMenu.DisplayToAll();
+}
+
+public void TankBoss_SpawnPost(int entity)
+{
+	//Don't show... admins are probably fooling around between waves
+	if (GameRules_GetRoundState() != RoundState_RoundRunning)
+		return;
+	
+#if SOURCEMOD_V_MINOR >= 13
+	g_adtTanks.RegisterTank(entity);
+#endif
+	
+	int iHealth = GetEntProp(entity, Prop_Data, "m_iHealth");
+	
+	SetHudTextParams(0.18, 0.9, 10.0, 255, 0, 0, 255);
+	
+	for (int i = 0; i <= MaxClients; i++)
+		if (IsClientInGame(i))
+			ShowSyncHudText(i, g_hHudSyncObject, "Tank spawned with %i health!", iHealth);
 }
 
 void ResetAllPlayerStats()
