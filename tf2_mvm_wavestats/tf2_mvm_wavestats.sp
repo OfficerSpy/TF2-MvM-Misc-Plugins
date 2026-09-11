@@ -92,6 +92,8 @@ methodmap TankMap < IntMap
 }
 #endif
 
+static bool m_bLateLoad;
+
 Handle g_hHudSyncObject;
 #if SOURCEMOD_V_MINOR >= 13
 IntMap g_adtTanks;
@@ -130,8 +132,19 @@ public void OnPluginStart()
 	
 	g_hHudSyncObject = CreateHudSynchronizer();
 #if SOURCEMOD_V_MINOR >= 13
-	g_adtTanks = new IntMap();
+	g_adtTanks = new TankMap();
 #endif
+	
+	if (m_bLateLoad)
+	{
+		StoreCurrentMissionName();
+	}
+}
+
+public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
+{
+	m_bLateLoad = late;
+	return APLRes_Success;
 }
 
 public void OnMapStart()
@@ -141,6 +154,10 @@ public void OnMapStart()
 #if SOURCEMOD_V_MINOR >= 13
 	g_adtTanks.RemoveAllTanks();
 #endif
+	
+	//Unload older inferior plugins...
+	// ServerCommand("sm plugins unload mvm_wavestats");
+	ServerCommand("sm plugins unload mvmstats");
 }
 
 public void OnClientDisconnect_Post(int client)
@@ -185,20 +202,7 @@ public Action Command_WaveStats(int client, int args)
 
 public void Event_TeamplayRoundStart(Event event, const char[] name, bool dontBroadcast)
 {
-	int rsrc = FindEntityByClassname(-1, "tf_objective_resource");
-	
-	if (rsrc != -1)
-	{
-		TF2_GetMvMPopfileName(rsrc, g_sCurrentMission, sizeof(g_sCurrentMission));
-		
-		//Trim these off
-		ReplaceString(g_sCurrentMission, sizeof(g_sCurrentMission), "scripts/population/", "");
-		ReplaceString(g_sCurrentMission, sizeof(g_sCurrentMission), ".pop", "");
-	}
-	else
-	{
-		g_sCurrentMission = "UNKNOWN SEX MISSION";
-	}
+	StoreCurrentMissionName();
 }
 
 public void Event_MvmBeginWave(Event event, const char[] name, bool dontBroadcast)
@@ -327,7 +331,7 @@ public void TankBoss_SpawnPost(int entity)
 	
 	SetHudTextParams(0.18, 0.9, 10.0, 255, 0, 0, 255);
 	
-	for (int i = 0; i <= MaxClients; i++)
+	for (int i = 1; i <= MaxClients; i++)
 		if (IsClientInGame(i))
 			ShowSyncHudText(i, g_hHudSyncObject, "Tank spawned with %i health!", iHealth);
 }
@@ -346,6 +350,24 @@ bool IsPVEDefender(int client)
 bool IsPVEInvader(int client)
 {
 	return TF2_GetClientTeam(client) == TFTeam_Blue;
+}
+
+void StoreCurrentMissionName()
+{
+	int rsrc = FindEntityByClassname(-1, "tf_objective_resource");
+	
+	if (rsrc != -1)
+	{
+		TF2_GetMvMPopfileName(rsrc, g_sCurrentMission, sizeof(g_sCurrentMission));
+		
+		//Trim these off
+		ReplaceString(g_sCurrentMission, sizeof(g_sCurrentMission), "scripts/population/", "");
+		ReplaceString(g_sCurrentMission, sizeof(g_sCurrentMission), ".pop", "");
+	}
+	else
+	{
+		g_sCurrentMission = "UNKNOWN SEX MISSION";
+	}
 }
 
 stock bool IsValidClientIndex(int client)
