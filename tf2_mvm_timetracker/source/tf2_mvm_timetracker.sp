@@ -9,6 +9,8 @@
 #define MVM_WAVE_NUMBER_MAX	64
 #define RECORD_DATA_PATH	"data/mvmtimetracker.txt"
 
+static bool m_bLateLoad;
+
 float g_flWaveTimes[MVM_WAVE_NUMBER_MAX];
 bool g_bWavePassed[MVM_WAVE_NUMBER_MAX];
 float g_flWaveStartTime = 0.0;
@@ -59,6 +61,17 @@ public void OnPluginStart()
 	
 	mvmtimetracker_wavetime_text_color1.GetString(g_sWaveTimeTextColor1, sizeof(g_sWaveTimeTextColor1));
 	mvmtimetracker_wavetime_text_color2.GetString(g_sWaveTimeTextColor2, sizeof(g_sWaveTimeTextColor2));
+
+	if (m_bLateLoad)
+	{
+		StoreCurrentMissionName();
+	}
+}
+
+public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
+{
+	m_bLateLoad = late;
+	return APLRes_Success;
 }
 
 public void OnMapStart()
@@ -194,20 +207,7 @@ public void Event_TeamplayRoundStart(Event event, const char[] name, bool dontBr
 		g_hWaveTimeTimer = null;
 	}
 	
-	int rsrc = FindEntityByClassname(-1, "tf_objective_resource");
-	
-	if (rsrc != -1)
-	{
-		TF2_GetMvMPopfileName(rsrc, g_sCurrentMission, sizeof(g_sCurrentMission));
-		
-		//Trim these off
-		ReplaceString(g_sCurrentMission, sizeof(g_sCurrentMission), "scripts/population/", "");
-		ReplaceString(g_sCurrentMission, sizeof(g_sCurrentMission), ".pop", "");
-	}
-	else
-	{
-		g_sCurrentMission = "STOP CHANGING MISSION NAMES";
-	}
+	StoreCurrentMissionName();
 }
 
 public Action Timer_ResetFailCounter(Handle timer, any value)
@@ -396,6 +396,24 @@ void SetSpeedrunRecordTime(const char[] sMission, int newTime)
 	}
 	
 	kv.Close();
+}
+
+void StoreCurrentMissionName()
+{
+	int rsrc = FindEntityByClassname(-1, "tf_objective_resource");
+	
+	if (rsrc != -1)
+	{
+		TF2_GetMvMPopfileName(rsrc, g_sCurrentMission, sizeof(g_sCurrentMission));
+		
+		//Trim these off
+		ReplaceString(g_sCurrentMission, sizeof(g_sCurrentMission), "scripts/population/", "");
+		ReplaceString(g_sCurrentMission, sizeof(g_sCurrentMission), ".pop", "");
+	}
+	else
+	{
+		g_sCurrentMission = "STOP CHANGING MISSION NAMES";
+	}
 }
 
 
